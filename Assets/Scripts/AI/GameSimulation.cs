@@ -203,7 +203,7 @@ namespace Assets.Scripts
         private Tuple<double, MoveInformation> AnalyzeMoves(PlayerType playerType, List<MoveInformation> possibleMoves,
             int depth, List<Cell> currentPlayerArmyCells, List<Cell> otherPlayerArmyCells)
         {
-            var resultBenefit = double.PositiveInfinity; // The best guaranteed profit
+            var resultBenefit = InfinityByPlayerType(playerType); // The best guaranteed profit
             MoveInformation bestMoveInformation = null; // The best move, null means that it is better not to move
             
             foreach (var moveInformation in possibleMoves)
@@ -226,7 +226,7 @@ namespace Assets.Scripts
                     resultBenefit = intermediateResult.Item1;
                     bestMoveInformation = moveInformation;
 
-                    if (IsMovePerfect(resultBenefit, distanceEnemyCastleTo, distanceEnemyCastleFrom))
+                    if (IsMovePerfect(resultBenefit, playerType, distanceEnemyCastleTo, distanceEnemyCastleFrom))
                     {
                         break;
                     }
@@ -237,11 +237,25 @@ namespace Assets.Scripts
         }
 
         /// <summary>
+        /// By playerType determines its goal, to maximize or minimize result
+        /// </summary>
+        /// <param name="playerType"></param>
+        private double InfinityByPlayerType(PlayerType playerType)
+        {
+            if (playerType == aiPlayerType)
+            {
+                return double.PositiveInfinity;
+            }
+            
+            return double.NegativeInfinity;
+        }
+
+        /// <summary>
         /// Checks that move leads to win in min number of steps
         /// </summary>
-        private Boolean IsMovePerfect(double moveBenefit, double distanceEnemyCastleTo, double distanceEnemyCastleFrom)
+        private Boolean IsMovePerfect(double moveBenefit, PlayerType playerType, double distanceEnemyCastleTo, double distanceEnemyCastleFrom)
         {
-            return double.IsNegativeInfinity(moveBenefit) && distanceEnemyCastleTo < distanceEnemyCastleFrom;
+            return playerType == aiPlayerType && double.IsNegativeInfinity(moveBenefit) && distanceEnemyCastleTo < distanceEnemyCastleFrom;
         }
 
         /// <summary>
@@ -250,10 +264,18 @@ namespace Assets.Scripts
         private Boolean IsMoveBetter(double currentBenefit, double moveBenefit, MoveInformation currentMove, 
             PlayerType playerType, double distanceEnemyCastleTo)
         {
-            return moveBenefit < currentBenefit ||
+            if (playerType == aiPlayerType)
+            {
+                return moveBenefit < currentBenefit ||
+                       Math.Abs(moveBenefit - currentBenefit) < EPSILON
+                       && (currentMove == null ||
+                           boardStorage.GetDistanceToEnemyCastle(currentMove.To, playerType) > distanceEnemyCastleTo);
+            }
+            
+            return moveBenefit > currentBenefit ||
                    Math.Abs(moveBenefit - currentBenefit) < EPSILON
                    && (currentMove == null ||
-                        boardStorage.GetDistanceToEnemyCastle(currentMove.To, playerType) > distanceEnemyCastleTo);
+                       boardStorage.GetDistanceToEnemyCastle(currentMove.To, playerType) > distanceEnemyCastleTo);
         }
 
         /// <summary>
