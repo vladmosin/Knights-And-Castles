@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
@@ -66,15 +65,11 @@ namespace Assets.Scripts
         /// Sprites for icons on board.
         /// </summary>
         [SerializeField] private Sprite neutralFriendlySprite;
-
         [SerializeField] private Sprite neutralAggressiveSprite;
-
         [SerializeField] private Sprite firstUserSprite;
-
         [SerializeField] private Sprite secondUserSprite;
-
-        [SerializeField] private Sprite castleSprite;
-
+        [SerializeField] private Sprite firstUserCastleSprite;
+        [SerializeField] private Sprite secondUserCastleSprite;
         [SerializeField] private Sprite passSprite;
 
         /// <summary>
@@ -193,17 +188,12 @@ namespace Assets.Scripts
         {
             currentArmy = null;
             currentSprite = null;
-            if (ExistsPlayerArmy(col, row, PlayerType.FIRST))
+            if (ExistsPlayerArmy(col, row))
             {
-                InitializePlayerArmyCell(PlayerType.FIRST, out currentArmy, out currentSprite);
+                InitializePlayerArmyCell(col, row, out currentArmy, out currentSprite);
             }
-            else if (ExistsPlayerArmy(col, row, PlayerType.SECOND))
+            else if (ExistBonus(col, row))
             {
-                InitializePlayerArmyCell(PlayerType.SECOND, out currentArmy, out currentSprite);
-            }
-            else if (ExistsPass(col, row))
-            {
-                //We do not want to have a 'surprise' army at the end of the pass.
                 return false;
             }
             else
@@ -217,6 +207,47 @@ namespace Assets.Scripts
                 InitializeNeutralCell(cellTypeId, col, row, out currentArmy, out currentSprite);    
             }
             return true;
+        }
+
+        /// <summary>
+        /// Generates army for player and produces corresponding sprite.
+        /// </summary>
+        /// <param name="col"></param>
+        /// <param name="row"></param>
+        /// <param name="army"></param>
+        /// <param name="sprite"></param>
+        private void InitializePlayerArmyCell(int col, int row, out Army army, out Sprite sprite)
+        {
+            if (ExistsPlayerArmy(col, row, PlayerType.FIRST))
+            {
+                InitializePlayerArmyCell(PlayerType.FIRST, out army, out sprite);
+            }
+            else
+            {
+                InitializePlayerArmyCell(PlayerType.SECOND, out army, out sprite);
+            }
+        }
+
+        /// <summary>
+        /// Determines whether the given cell contains player army according to the configuration.
+        /// </summary>
+        /// <param name="col"></param>
+        /// <param name="row"></param>
+        /// <returns></returns>
+        private bool ExistsPlayerArmy(int col, int row)
+        {
+            return ExistsPlayerArmy(col, row, PlayerType.FIRST) || ExistsPlayerArmy(col, row, PlayerType.SECOND);
+        }
+
+        /// <summary>
+        /// Determines whether the given cell contains a castle or a pass according to the configuration.
+        /// </summary>
+        /// <param name="col"></param>
+        /// <param name="row"></param>
+        /// <returns></returns>
+        private bool ExistBonus(int col, int row)
+        {
+            return ExistsPass(col, row) || ExistsCastle(col, row);
         }
 
         /// <summary>
@@ -335,6 +366,36 @@ namespace Assets.Scripts
             }
             return false;
         }
+        
+        /// <summary>
+        /// Determines whether the given cell contains a castle according to the configuration.
+        /// </summary>
+        private bool ExistsCastle(int col, int row)
+        {
+            var position = new IntVector2(col, row);
+            for (var i = 0; i < configuration.FirstCastlesBlocks.Length; i++)
+            {
+                //Given coordinates are global, so we need to convert the position in the configuration to global.
+                var globalPosition = GetGlobalPosition(configuration.FirstCastlesPositions[i],
+                    configuration.FirstCastlesBlocks[i]);
+                if (position.Equals(globalPosition))
+                {
+                    return true;
+                }
+            }
+            
+            for (var i = 0; i < configuration.SecondCastlesBlocks.Length; i++)
+            {
+                //Given coordinates are global, so we need to convert the position in the configuration to global.
+                var globalPosition = GetGlobalPosition(configuration.SecondCastlesPositions[i],
+                    configuration.SecondCastlesBlocks[i]);
+                if (position.Equals(globalPosition))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
 
         /// <summary>
         /// Returns the position on the whole board by the position inside the block and the position of the block.
@@ -384,6 +445,15 @@ namespace Assets.Scripts
         {
             for (var i = 0; i < positions.Length; i++)
             {
+                Sprite castleSprite = null;
+                if (ownerType == PlayerType.FIRST)
+                {
+                    castleSprite = firstUserCastleSprite;
+                }
+                else if (ownerType == PlayerType.SECOND)
+                {
+                    castleSprite = secondUserCastleSprite;
+                }
                 var castleObject = InstantiateIcon(castleSprite);
                 castleObject.SetActive(false);
                 var castle = new Castle(castleObject, ownerType);
@@ -420,19 +490,30 @@ namespace Assets.Scripts
                         continue;
                     }
 
-                    var spearmen = array[currentInd];
-                    currentInd++;
-                    var archers = array[currentInd];
-                    currentInd++;
-                    var cavalrymen = array[currentInd];
-                    currentInd++;
-                    var armyComposition = new ArmyComposition(spearmen, archers, cavalrymen);
+                    var armyComposition = FillArmyCompositionFromArray(array, currentInd);
+                    // Three bytes were read from array
+                    currentInd += 3;
 
                     InitializeCellById(currentType, armyComposition, out var currentArmy, out var currentSprite);
                     CompleteArmyCellInitialization(currentBoardTable, col, row, currentArmy, currentSprite);
                 }
             }
             boardStorage.Fill(currentBoardTable, currentBonusTable);
+        }
+
+        /// <summary>
+        /// Reads army composition from array from given index consisting of three bytes: spearmen, archers, cavalrymen
+        /// </summary>
+        /// <param name="array"></param>
+        /// <param name="index"></param>
+        /// <returns></returns>
+        private ArmyComposition FillArmyCompositionFromArray(byte[] array, int index)
+        {
+            var spearmen = array[index];
+            var archers = array[index + 1];
+            var cavalrymen = array[index + 2];
+            
+            return new ArmyComposition(spearmen, archers, cavalrymen);
         }
 
         /// <summary>
